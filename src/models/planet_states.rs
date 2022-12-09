@@ -134,22 +134,6 @@ impl PlanetStates {
         }
 
         self.changed = true;
-        // let (ships, owner) = {
-        //     let b = self.future.back().unwrap();
-        //     (b.ships, b.owner)
-        // };
-        //
-        // if let Some(st) = self.future.front_mut() {
-        //     let addition = (owner != NEUTRAL).then_some(1).unwrap_or(0);
-        //     *st = Planet {
-        //         ships: ships + addition,
-        //         owner,
-        //         id: self.planet.id,
-        //         loc: self.planet.loc,
-        //     };
-        // }
-        //
-        // self.future.rotate_left(1);
     }
 
     fn calculate_states(&mut self) -> Option<()> {

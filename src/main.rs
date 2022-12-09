@@ -23,68 +23,71 @@ fn simple_turn(state: &mut State) -> Option<()> {
     Some(())
 }
 
-// #[derive(Debug)]
-// struct OptionalMove {
-//     source: usize,
-//     target: usize,
-//     ships: i32,
-//
-//     duration: usize,
-// }
-//
-// fn calculate_attack_moves(friendlies: &mut Vec<Planet>, target: &Planet) -> Vec<OptionalMove> {
-//     let mut out = Vec::new();
-//     let ord = PlanetOrderer::planet(target);
-//     friendlies.sort_by(ord);
-//
-//     let mut ships_required = target.ships;
-//     for friendly in friendlies {
-//         if ships_required < 0 {
-//             break;
-//         }
-//
-//         let sc = friendly.ships;
-//         let duration = (friendly.loc - target.loc).length();
-//
-//         out.push(OptionalMove {
-//             source: friendly.id,
-//             target: target.id,
-//             ships: sc,
-//             duration: duration.ceil() as usize,
-//         });
-//         ships_required -= sc;
-//     }
-//
-//     if ships_required >= 0 {
-//         return Vec::new();
-//     }
-//
-//     out
-// }
-//
-// fn best_planet(state: &mut State) -> Option<()> {
-//     eprintln!("Turn ---------------");
-//     let mut friendly: Vec<_> = state.friendlies().collect();
-//
-//     let turnes = state
-//         .enemies_at(10)
-//         .filter_map(|enemy| {
-//             let attack_moves = calculate_attack_moves(&mut friendly, &enemy);
-//             eprintln!("Attack moves {:?}", attack_moves);
-//             (!attack_moves.is_empty()).then_some(attack_moves)
-//         })
-//         .min_by_key(|x| x.iter().map(|y| y.duration).max().unwrap())?;
-//
-//     let max_turn = turnes.iter().map(|y| y.duration).max().unwrap();
-//     for turn in turnes {
-//         if turn.duration == max_turn {
-//             state.add_turn(turn.source, turn.target, turn.ships);
-//         }
-//     }
-//
-//     Some(())
-// }
-//
+#[derive(Debug)]
+struct OptionalMove {
+    source: usize,
+    target: usize,
+    ships: i32,
+
+    duration: usize,
+}
+
+fn calculate_attack_moves(friendlies: &mut Vec<Planet>, target: &Planet) -> Vec<OptionalMove> {
+    let mut out = Vec::new();
+    let ord = PlanetOrderer::planet(target);
+    friendlies.sort_by(ord);
+
+    let mut ships_required = target.ships;
+    for friendly in friendlies {
+        if ships_required < 0 {
+            break;
+        }
+
+        let sc = friendly.ships;
+        let duration = (friendly.loc - target.loc).length();
+
+        out.push(OptionalMove {
+            source: friendly.id,
+            target: target.id,
+            ships: sc,
+            duration: duration.ceil() as usize,
+        });
+        ships_required -= sc;
+    }
+
+    if ships_required >= 0 {
+        return Vec::new();
+    }
+
+    out
+}
+
+fn best_planet(state: &mut State) -> Option<()> {
+    let friendlies: Vec<_> = state
+        .planets()
+        .iter()
+        .map(|p| p[0])
+        .filter(|x| x.owner == ME)
+        .collect();
+
+    let turnes = state
+        .enemies_at(10)
+        .filter_map(|enemy| {
+            let attack_moves = calculate_attack_moves(&mut friendly, &enemy);
+            eprintln!("Attack moves {:?}", attack_moves);
+            (!attack_moves.is_empty()).then_some(attack_moves)
+        })
+        .min_by_key(|x| x.iter().map(|y| y.duration).max().unwrap())?;
+
+    let max_turn = turnes.iter().map(|y| y.duration).max().unwrap();
+    for turn in turnes {
+        if turn.duration == max_turn {
+            state.add_turn(turn.source, turn.target, turn.ships);
+        }
+    }
+
+    Some(())
+}
 
 fn turn(state: &mut State) {
     simple_turn(state);
