@@ -76,6 +76,12 @@ pub struct Planet {
     pub loc: Vec2<f32>,
 }
 
+impl Planet {
+    pub fn loc(&self) -> &Vec2<f32> {
+        &self.loc
+    }
+}
+
 impl AsRef<Vec2<f32>> for Planet {
     fn as_ref(&self) -> &Vec2<f32> {
         &self.loc
@@ -123,6 +129,21 @@ pub struct Output<'a> {
 pub type Owner = usize;
 pub const ME: Owner = 1;
 pub const NEUTRAL: Owner = 0;
+
+pub fn is_me(owner: &Owner) -> bool {
+    *owner == ME
+}
+
+pub fn is_not_me(owner: &Owner) -> bool {
+    *owner != ME
+}
+
+pub fn is_enemy(owner: &Owner) -> bool {
+    *owner > 1
+}
+pub fn is_neutral(owner: &Owner) -> bool {
+    *owner == 0
+}
 
 #[cfg(test)]
 mod tests {

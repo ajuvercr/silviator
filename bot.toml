@@ -1,6 +1,6 @@
 # Comand to run when starting the bot.
 # Argv style also supported: ["python", "simplebot.py"]
-command = "./target/debug/silviator"
+command = "./target/release/silviator"
 
 # Directory in which to run the command.
 # It is recommended to use an absolute path here.

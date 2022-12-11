@@ -36,7 +36,7 @@ impl PlanetState {
 #[derive(Debug)]
 pub struct PlanetStates {
     changed: bool,
-    planet: Planet,
+    pub planet: Planet,
     states: VecDeque<Vec<ExpEvent>>,
     future: VecDeque<Planet>,
 }
@@ -96,6 +96,18 @@ impl PlanetStates {
         out
     }
 
+    pub fn id(&self) -> usize {
+        self.planet.id
+    }
+
+    pub fn distance(&self, other: &Self) -> usize {
+        (*self.planet.loc() - *other.planet.loc()).length().ceil() as usize
+    }
+
+    pub fn futures(&self) -> impl Iterator<Item = &Planet> {
+        self.future.iter()
+    }
+
     pub fn incoming_exp(&mut self, expedition: &Expedition) {
         assert_eq!(expedition.destination, self.planet.id);
 
@@ -115,7 +127,7 @@ impl PlanetStates {
         }
     }
 
-    pub fn turn(&mut self) {
+    pub fn turn(&mut self, planet: Planet) {
         if self.planet.owner != NEUTRAL {
             self.planet.ships += 1;
         }
@@ -123,8 +135,8 @@ impl PlanetStates {
         self.states.rotate_left(1);
         if let Some(st) = self.states.back_mut() {
             let mut current = PlanetState {
-                owner: self.planet.owner,
-                ships: self.planet.ships,
+                owner: planet.owner,
+                ships: planet.ships,
             };
             current = execute_combat(current, st);
             self.planet.owner = current.owner;
