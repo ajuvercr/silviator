@@ -3,10 +3,11 @@
 use std::{
     collections::BinaryHeap,
     error::Error,
-    fs::File,
     io::stdin,
     time::{Duration, Instant},
 };
+
+use graphs::Operation;
 
 use crate::{graphs::try_oo, models::*};
 
@@ -49,7 +50,7 @@ pub struct OptionalOperation {
 
 impl OptionalOperation {
     pub fn score(&self) -> f32 {
-        (self.required_ships as f32 * 3.0 + self.duration as f32 * 2.) * self.weight
+        self.weight / (self.required_ships.pow(2) as f32 + self.duration.pow(2) as f32)
     }
 }
 
@@ -73,7 +74,7 @@ impl Ord for OptionalOperation {
         let this_score = self.score();
         let other_score = other.score();
 
-        this_score.partial_cmp(&other_score).unwrap().reverse()
+        this_score.partial_cmp(&other_score).unwrap()
     }
 }
 
@@ -82,24 +83,24 @@ fn find_optional_operations(
     states: &State,
     queue: &mut BinaryHeap<OptionalOperation>,
 ) {
-    // TODO this can just be an array
+    let weight = if target.planet.owner == ME { 2. } else { 1. };
     let mut distances: Vec<Vec<(&PlanetStates, usize)>> = Vec::new();
-
-    let mut maybe_insert = |p, d| {
-        while distances.len() <= d {
-            distances.push(Vec::new());
-        }
-        distances[d].push(p);
-    };
 
     for p in states.planets() {
         let d = p.distance(target);
-        maybe_insert((p, d), d);
+        while distances.len() <= d {
+            distances.push(Vec::new());
+        }
+        distances[d].push((p, d));
     }
 
-    let mut closers = Vec::new();
-    for (d, options) in distances.into_iter().enumerate() {
-        closers.extend(options);
+    let mut options = Vec::new();
+    for (d, extra_options) in distances.into_iter().enumerate() {
+        if extra_options.is_empty() {
+            continue;
+        }
+
+        options.extend(extra_options);
 
         if target[d].owner == ME {
             continue;
@@ -108,22 +109,22 @@ fn find_optional_operations(
         let required_ships = target[d].ships + 1;
         let mut usable_planets = Vec::new();
 
-        for (o, actual_dist) in &closers {
-            let actual_required = o[d - actual_dist];
-            if actual_required.owner != ME {
+        for (o, actual_dist) in &options {
+            let optional_planet = o[d - actual_dist];
+            if optional_planet.owner != ME {
                 continue;
             }
 
             usable_planets.push(UsablePlanet {
                 id: o.id(),
                 dist: *actual_dist,
-                usable_ships: actual_required.ships,
+                usable_ships: optional_planet.ships,
             });
         }
 
         if usable_planets.iter().map(|x| x.usable_ships).sum::<i32>() > required_ships {
             let oo = OptionalOperation {
-                weight: 1.,
+                weight,
                 duration: d,
                 required_ships,
                 usable_planets,
@@ -131,6 +132,19 @@ fn find_optional_operations(
             };
 
             queue.push(oo);
+            return;
+        }
+    }
+}
+
+fn print_operations(state: &State, operation: &Vec<Operation>) {
+    for operation in operation {
+        eprintln!("Operation:");
+        for part in &operation.solution {
+            eprintln!(
+                "  {} --{}-> {}",
+                state.inv_planet_map[part.source], part.ships, state.inv_planet_map[part.target]
+            );
         }
     }
 }
@@ -142,38 +156,39 @@ fn best_planet(state: &mut State, started: Instant) -> Option<()> {
         .iter()
         .for_each(|p| find_optional_operations(p, state, &mut b_heap));
 
-    if let Some(turn) = b_heap.pop() {
-        eprintln!("Found turn {:?}", turn);
-        let mut req = turn.required_ships + 1;
-        let target = turn.target;
+    let mut best: Vec<Operation> = Vec::new();
+    let mut best_score = f32::MIN;
 
-        let total_usable: i32 = turn.usable_planets.iter().map(|u| u.usable_ships).sum();
+    let mut tried = Vec::new();
+    let mut max_len = 0;
+    while started.elapsed() < Duration::from_millis(800) {
+        if let Some(turn) = b_heap.pop() {
+            tried.push(turn);
+            let o = try_oo(&tried, state);
 
-        for UsablePlanet {
-            id,
-            dist,
-            usable_ships,
-        } in &turn.usable_planets
-        {
-            if *dist == turn.duration {
-                let sending = usable_ships * req / total_usable;
-                state.add_turn(*id, target, sending);
-                req -= sending;
+            let score = o.iter().map(|x| x.score).sum();
+            max_len = max_len.max(o.len());
+            if score > best_score {
+                eprintln!("Found better");
+                print_operations(state, &o);
+                best_score = score;
+                best = o;
             }
+        } else {
+            break;
         }
+    }
 
-        let mut tried = vec![turn];
-        let mut max_len = 0;
-        while started.elapsed() < Duration::from_millis(800) && !b_heap.is_empty() {
-            if let Some(turn) = b_heap.pop() {
-                tried.push(turn);
-                let o = try_oo(&tried, state);
-                max_len = max_len.max(o.len());
-            } else {
-                break;
-            }
+    eprintln!(
+        "Executing {} operations with total score {}",
+        best.len(),
+        best_score
+    );
+
+    for operation in best {
+        for part in operation.solution {
+            state.add_turn(part.source, part.target, part.ships);
         }
-        eprintln!("found {}: {}", tried.len(), max_len);
     }
 
     Some(())
@@ -203,9 +218,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     while let Some(Ok(line)) = lines.next() {
         let now = Instant::now();
         let input = serde_json::from_str::<Input>(&line)?;
-        state.turn(input);
 
         eprintln!("-------------------------  Turn {}", turn_count);
+        state.turn(input);
+        eprintln!("-------------------------");
+
         turn(&mut state, now);
         turn_count += 1;
     }

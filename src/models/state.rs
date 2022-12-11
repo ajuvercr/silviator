@@ -50,14 +50,14 @@ pub struct State {
     planets: Vec<PlanetStates>,
 
     planet_map: PlanetMap,
-    inv_planet_map: Vec<String>,
+    pub inv_planet_map: Vec<String>,
 
     handled_exps: u64,
 
     turns: Vec<(usize, usize, i32)>,
-    turn: usize,
 }
 
+#[allow(unused)]
 impl State {
     pub fn new(input: Input) -> Self {
         let mut planets = Vec::new();
@@ -84,20 +84,6 @@ impl State {
             .unwrap()
             .ceil() as usize;
 
-        let min_dist = planets
-            .iter()
-            .flat_map(|p1| {
-                planets
-                    .iter()
-                    .filter(|x| p1.id != x.id)
-                    .map(|p2| (p1.loc - p2.loc).length())
-            })
-            .min_by(|x, y| x.total_cmp(&y))
-            .unwrap()
-            .ceil() as usize;
-
-        eprintln!("Test distances max {} min {}", max_dist, min_dist);
-
         let planet_count = planets.len();
         let planet_states = planets
             .into_iter()
@@ -110,7 +96,6 @@ impl State {
             inv_planet_map,
             handled_exps: 0,
             turns: Vec::new(),
-            turn: 0,
         }
     }
 
@@ -131,8 +116,6 @@ impl State {
             expeditions,
         }: Input,
     ) {
-        self.turn += 1;
-        eprintln!("{} -----------------------", self.turn);
         let exps = self.handled_exps;
 
         for e in expeditions
@@ -148,7 +131,7 @@ impl State {
             })
         {
             eprintln!(
-                "Handling expedition {}",
+                "{}",
                 ExpeditionFmt {
                     state: self,
                     exp: &e
@@ -162,8 +145,8 @@ impl State {
         for planet in planets {
             let idx = self.planet_map[&planet.name];
             let p = &mut self.planets[idx];
-            p.turn(map_planet(&planet, &self.planet_map));
-            p.flush()
+            p.turn();
+            p.flush(map_planet(&planet, &self.planet_map))
         }
     }
 
@@ -219,7 +202,7 @@ mod tests {
         let mut state: Option<State> = None;
         for turn in turns {
             if let Some(state) = state.as_mut() {
-                // assert!(state.turn(turn));
+                state.turn(turn);
             } else {
                 state = Some(State::new(turn));
             }

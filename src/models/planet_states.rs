@@ -79,6 +79,7 @@ fn execute_combat(current: PlanetState, exp_events: &Vec<ExpEvent>) -> PlanetSta
     }
 }
 
+#[allow(unused)]
 impl PlanetStates {
     pub fn new(planet: Planet, players: usize, max_size: usize) -> Self {
         let mut out = Self {
@@ -91,7 +92,7 @@ impl PlanetStates {
         out.states.resize(max_size, new_state(players + 1));
         out.future.resize(max_size + 1, out.planet);
 
-        out.calculate_states().unwrap();
+        out.calculate_states(planet).unwrap();
 
         out
     }
@@ -120,14 +121,14 @@ impl PlanetStates {
         self.changed = true;
     }
 
-    pub fn flush(&mut self) {
+    pub fn flush(&mut self, planet: Planet) {
         if self.changed {
             self.changed = false;
-            self.calculate_states().unwrap();
+            self.calculate_states(planet).unwrap();
         }
     }
 
-    pub fn turn(&mut self, planet: Planet) {
+    pub fn turn(&mut self) {
         if self.planet.owner != NEUTRAL {
             self.planet.ships += 1;
         }
@@ -135,8 +136,8 @@ impl PlanetStates {
         self.states.rotate_left(1);
         if let Some(st) = self.states.back_mut() {
             let mut current = PlanetState {
-                owner: planet.owner,
-                ships: planet.ships,
+                owner: self.planet.owner,
+                ships: self.planet.ships,
             };
             current = execute_combat(current, st);
             self.planet.owner = current.owner;
@@ -148,10 +149,16 @@ impl PlanetStates {
         self.changed = true;
     }
 
-    fn calculate_states(&mut self) -> Option<()> {
+    fn calculate_states(&mut self, planet: Planet) -> Option<()> {
+        if planet.owner != self.planet.owner || planet.ships != self.planet.ships {
+            eprintln!("Got something looking like a zero turn move");
+        }
+        self.planet.ships = planet.ships;
+        self.planet.owner = planet.owner;
+
         let mut current = PlanetState {
-            owner: self.planet.owner,
-            ships: self.planet.ships,
+            owner: planet.owner,
+            ships: planet.ships,
         };
 
         // First state is self
@@ -213,21 +220,21 @@ mod tests {
         let p1 = |i| p(i, 1);
 
         let mut player = PlanetStates::new(p1(0), 2, 5);
-        player.flush();
+        player.flush(p1(0));
         assert_eq!(
             player.future,
             vec![p1(0), p1(1), p1(2), p1(3), p1(4), p1(5)]
         );
 
         player.turn();
-        player.flush();
+        player.flush(p1(1));
         assert_eq!(
             player.future,
             vec![p1(1), p1(2), p1(3), p1(4), p1(5), p1(6)]
         );
 
         let mut neutral = PlanetStates::new(p0(0), 2, 5);
-        neutral.flush();
+        neutral.flush(p0(0));
         assert_eq!(
             neutral.future,
             vec![p0(0), p0(0), p0(0), p0(0), p0(0), p0(0)]
@@ -242,12 +249,12 @@ mod tests {
         let exp = e(2, 2, 2);
 
         ps.incoming_exp(&exp);
-        ps.flush();
+        ps.flush(p1(0));
 
         assert_eq!(ps.future, vec![p1(0), p1(1), p1(2), p1(1), p1(2), p1(3)]);
 
         ps.turn();
-        ps.flush();
+        ps.flush(p1(1));
         assert_eq!(ps.future, vec![p1(1), p1(2), p1(1), p1(2), p1(3), p1(4)]);
     }
 
@@ -260,7 +267,7 @@ mod tests {
         let exp = e(5, 2, 2);
 
         ps.incoming_exp(&exp);
-        ps.flush();
+        ps.flush(p1(0));
 
         assert_eq!(ps.future, vec![p1(0), p1(1), p1(2), p2(2), p2(3), p2(4)]);
     }
@@ -271,12 +278,12 @@ mod tests {
 
         let mut ps = PlanetStates::new(p1(2), 2, 5);
         ps.dispatch(2);
-        ps.flush();
+        ps.flush(p1(0));
 
         assert_eq!(ps.future, vec![p1(0), p1(1), p1(2), p1(3), p1(4), p1(5)]);
 
         ps.turn();
-        ps.flush();
+        ps.flush(p1(1));
         assert_eq!(ps.future, vec![p1(1), p1(2), p1(3), p1(4), p1(5), p1(6)]);
     }
 }

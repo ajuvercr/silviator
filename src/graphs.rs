@@ -27,9 +27,17 @@ pub enum Type {
 }
 
 #[derive(Debug, Clone)]
+struct PlanetNodeRef {
+    id: usize,
+    planet: usize,
+    edge: EdgeId,
+    future: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct OperationNode<'b> {
     destination: EdgeId,
-    planets: Vec<(usize, EdgeId)>,
+    planets: Vec<PlanetNodeRef>,
 
     pub optional_operation: &'b OptionalOperation,
 }
@@ -42,7 +50,7 @@ impl<'a> Into<Node<'a>> for OperationNode<'a> {
 
 #[derive(Debug, Clone, Default)]
 pub struct PlanetNode {
-    id: usize,
+    planet_node_id: usize,
     required: Vec<EdgeId>,
 }
 
@@ -171,17 +179,17 @@ impl<'a, 'b> NodeOrchestrator<'a, 'b> {
         self.builder.add_edge(source, target)
     }
 
-    fn add_usable_planet(&mut self, ub: &UsablePlanet, duration: usize) -> NodeId {
+    fn add_usable_planet(&mut self, usable_planet: &UsablePlanet, duration: usize) -> NodeId {
         let planets = self.state.planets();
-        let index = duration - ub.dist;
-        let planet_id = ub.id;
+        let index = duration - usable_planet.dist;
+        let planet_id = usable_planet.id;
 
         for i in self.planets[planet_id].len()..index + 1 {
             // Spawn planet
 
             if i == 0 {
                 let node = PlanetNode::default();
-                let count = planets[ub.id][0].ships;
+                let count = usable_planet.usable_ships;
                 let planet_node = self.add_node(node);
                 self.planets[planet_id].push(planet_node);
 
@@ -193,7 +201,7 @@ impl<'a, 'b> NodeOrchestrator<'a, 'b> {
                 let id = self.created_planets;
                 self.created_planets += 1;
                 let node = PlanetNode {
-                    id,
+                    planet_node_id: id,
                     required: self[parent].planet().required.clone(),
                 };
 
@@ -202,7 +210,8 @@ impl<'a, 'b> NodeOrchestrator<'a, 'b> {
 
                 self.add_edge(parent, planet_node, None);
 
-                let delta = planets[ub.id][i].ships - planets[ub.id][i - 1].ships;
+                let delta =
+                    planets[usable_planet.id][i].ships - planets[usable_planet.id][i - 1].ships;
 
                 // You are losing ships mate
                 let req = if delta < 0 {
@@ -230,18 +239,23 @@ impl<'a, 'b> NodeOrchestrator<'a, 'b> {
         let req = self.add_edge(op_id, self.destination, op.required_ships.into());
         self[op_id].op_mut().destination = req;
 
-        for ub in &op.usable_planets {
-            let node = self.add_usable_planet(ub, op.duration);
+        for usable_planet in &op.usable_planets {
+            let node = self.add_usable_planet(usable_planet, op.duration);
             let incoming = self.add_edge(node, op_id, None);
 
-            let id = self[node].planet().id;
+            let id = self[node].planet().planet_node_id;
 
             let op = self[op_id].op_mut();
-            op.planets.push((id, incoming));
+            op.planets.push(PlanetNodeRef {
+                id,
+                planet: usable_planet.id,
+                edge: incoming,
+                future: op.optional_operation.duration != usable_planet.dist,
+            });
         }
     }
 
-    fn solve(self) -> Vec<Operation<'b>> {
+    fn solve(self) -> Vec<Operation> {
         let graph = self.builder.into_graph();
 
         let (_, edges, _) = edmondskarp(&graph, self.source, self.destination, |e| {
@@ -273,7 +287,7 @@ impl<'a, 'b> NodeOrchestrator<'a, 'b> {
             })
             .filter_map(|p| {
                 if p.required.iter().all(|x| good_edges.contains(x)) {
-                    Some(p.id)
+                    Some(p.planet_node_id)
                 } else {
                     None
                 }
@@ -287,19 +301,21 @@ impl<'a, 'b> NodeOrchestrator<'a, 'b> {
                 _ => None,
             })
             .filter_map(|x| {
-                if x.planets.iter().all(|(x, _)| good_planets.contains(x))
+                if x.planets.iter().all(|node| good_planets.contains(&node.id))
                     && good_edges.contains(&x.destination)
                 {
                     let target = x.optional_operation.target;
                     Some(Operation {
-                        original: x.optional_operation,
+                        score: x.optional_operation.score(),
                         solution: x
                             .planets
                             .iter()
-                            .map(|(source, edge)| SolutionPart {
-                                source: *source,
-                                target,
-                                ships: edge_amounts[edge],
+                            .flat_map(|node| {
+                                (!node.future).then_some(SolutionPart {
+                                    source: node.planet,
+                                    target,
+                                    ships: edge_amounts[&node.edge],
+                                })
                             })
                             .collect(),
                     })
@@ -316,12 +332,13 @@ pub struct SolutionPart {
     pub target: usize,
     pub ships: i32,
 }
-pub struct Operation<'a> {
-    pub original: &'a OptionalOperation,
+
+pub struct Operation {
+    pub score: f32,
     pub solution: Vec<SolutionPart>,
 }
 
-pub fn try_oo<'a, 'b>(operations: &'b [OptionalOperation], state: &'a State) -> Vec<Operation<'b>> {
+pub fn try_oo<'a, 'b>(operations: &'b [OptionalOperation], state: &'a State) -> Vec<Operation> {
     let mut orchestrator = NodeOrchestrator::new(state);
 
     for op in operations {
