@@ -181,6 +181,10 @@ impl PlanetStates {
 
         Some(())
     }
+
+    pub fn iter_from(&self, start: usize) -> impl Iterator<Item = &Planet> {
+        self.future.iter().skip(start)
+    }
 }
 
 impl Index<usize> for PlanetStates {

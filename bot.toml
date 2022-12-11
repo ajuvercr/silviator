@@ -4,4 +4,4 @@ command = "./target/release/silviator"
 
 # Directory in which to run the command.
 # It is recommended to use an absolute path here.
-working_directory = "/home/silvius/Projects/silviator/"
+working_directory = "/home/silvius/Projects/pw-silviator/"

@@ -130,13 +130,6 @@ impl State {
                 destination: self.planet_map[&e.destination],
             })
         {
-            eprintln!(
-                "{}",
-                ExpeditionFmt {
-                    state: self,
-                    exp: &e
-                }
-            );
             self.planets[e.destination].incoming_exp(&e);
             self.planets[e.origin].dispatch(e.ships);
             self.handled_exps += 1;

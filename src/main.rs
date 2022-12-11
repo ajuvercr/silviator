@@ -50,7 +50,7 @@ pub struct OptionalOperation {
 
 impl OptionalOperation {
     pub fn score(&self) -> f32 {
-        self.weight / (self.required_ships.pow(2) as f32 + self.duration.pow(2) as f32)
+        self.weight / (self.duration as i32 * self.required_ships).pow(2) as f32
     }
 }
 
@@ -83,7 +83,11 @@ fn find_optional_operations(
     states: &State,
     queue: &mut BinaryHeap<OptionalOperation>,
 ) {
-    let weight = if target.planet.owner == ME { 2. } else { 1. };
+    let weight = match target.planet.owner {
+        0 => 1.,
+        1 => 5.,
+        _ => 10.,
+    };
     let mut distances: Vec<Vec<(&PlanetStates, usize)>> = Vec::new();
 
     for p in states.planets() {
@@ -102,7 +106,7 @@ fn find_optional_operations(
 
         options.extend(extra_options);
 
-        if target[d].owner == ME {
+        if target.iter_from(d).any(|x| x.owner == ME) {
             continue;
         }
 
@@ -111,15 +115,25 @@ fn find_optional_operations(
 
         for (o, actual_dist) in &options {
             let optional_planet = o[d - actual_dist];
+
             if optional_planet.owner != ME {
                 continue;
             }
 
-            usable_planets.push(UsablePlanet {
-                id: o.id(),
-                dist: *actual_dist,
-                usable_ships: optional_planet.ships,
-            });
+            let required_to_survive_for_5_turns = o
+                .iter_from(d - actual_dist)
+                .take(10)
+                .map(|x| if x.owner == ME { x.ships } else { -1 * x.ships })
+                .min()
+                .unwrap();
+
+            if required_to_survive_for_5_turns > 0 {
+                usable_planets.push(UsablePlanet {
+                    id: o.id(),
+                    dist: *actual_dist,
+                    usable_ships: required_to_survive_for_5_turns - 1,
+                });
+            }
         }
 
         if usable_planets.iter().map(|x| x.usable_ships).sum::<i32>() > required_ships {
@@ -169,8 +183,6 @@ fn best_planet(state: &mut State, started: Instant) -> Option<()> {
             let score = o.iter().map(|x| x.score).sum();
             max_len = max_len.max(o.len());
             if score > best_score {
-                eprintln!("Found better");
-                print_operations(state, &o);
                 best_score = score;
                 best = o;
             }
@@ -180,9 +192,10 @@ fn best_planet(state: &mut State, started: Instant) -> Option<()> {
     }
 
     eprintln!(
-        "Executing {} operations with total score {}",
+        "Executing {} operations with total score {} (max len {})",
         best.len(),
-        best_score
+        best_score,
+        max_len
     );
 
     for operation in best {
